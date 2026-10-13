@@ -3,62 +3,130 @@ from supabase import create_client
 
 st.set_page_config(page_title="Power BI Portal", page_icon="📊", layout="centered")
 
+# Get these from Supabase Dashboard > Project Settings > API Keys.
+# Use the Project URL and a publishable/anon key only.
+# Do NOT use a service_role or sb_secret key in this app.
+SUPABASE_URL = "https://supabase.com/dashboard/project/hwfunijrvzhpsxfbjfvi"
+SUPABASE_KEY = "sb_publishable_nOEJ-PLfLkh3JnHXDYyuKA_bz6uRIJz"
+
 
 def get_client():
-    # One client PER browser session. Do not use st.cache_resource here:
-    # it would share one logged-in session across every visitor.
-    if "sb" not in st.session_state:
-        st.session_state.sb = create_client(
-            st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"]
+    """Create one Supabase client per Streamlit browser session."""
+    if "YOUR-PROJECT-REF" in SUPABASE_URL or "sb_publishable_nOEJ-PLfLkh3JnHXDYyuKA_bz6uRIJz" in SUPABASE_KEY:
+        st.error(
+            "Please edit app.py and replace SUPABASE_URL and SUPABASE_KEY "
+            "with your actual Supabase Project URL and publishable/anon key."
         )
+        st.stop()
+
+    if "sb" not in st.session_state:
+        st.session_state.sb = create_client(SUPABASE_URL, SUPABASE_KEY)
+
     return st.session_state.sb
 
 
 def sign_in(email: str, password: str) -> bool:
     sb = get_client()
     try:
-        res = sb.auth.sign_in_with_password({"email": email.strip().lower(), "password": password})
-        role = (
-            sb.table("profiles").select("role").eq("id", res.user.id).single().execute().data["role"]
+        response = sb.auth.sign_in_with_password(
+            {"email": email.strip().lower(), "password": password}
         )
-        url = sb.table("reports").select("url").eq("role", role).single().execute().data["url"]
-    except Exception:
-        sb.auth.sign_out()
+        if not response.user:
+            return False
+
+        profile_response = (
+            sb.table("profiles")
+            .select("role")
+            .eq("id", response.user.id)
+            .single()
+            .execute()
+        )
+        role = profile_response.data["role"]
+
+        report_response = (
+            sb.table("reports")
+            .select("url")
+            .eq("role", role)
+            .single()
+            .execute()
+        )
+        report_url = report_response.data["url"]
+
+        st.session_state.update(
+            email=response.user.email,
+            role=role,
+            report_url=report_url,
+        )
+        return True
+
+    except Exception as exc:
+        try:
+            sb.auth.sign_out()
+        except Exception:
+            pass
+        # Keep the app usable while providing a useful error for setup issues.
+        st.session_state["login_error_detail"] = str(exc)
         return False
-    st.session_state.update(email=res.user.email, role=role, report_url=url)
-    return True
 
 
 def sign_out():
     try:
-        get_client().auth.sign_out()
+        if "sb" in st.session_state:
+            st.session_state.sb.auth.sign_out()
+    except Exception:
+        pass
     finally:
         st.session_state.clear()
 
 
 def login_view():
-    st.markdown("<h1 style='text-align:center'>📊 Power BI Portal</h1>", unsafe_allow_html=True)
+    st.markdown(
+        "<h1 style='text-align:center'>📊 Power BI Portal</h1>",
+        unsafe_allow_html=True,
+    )
     st.caption("Sign in to access your dashboard")
+
     with st.form("login"):
         email = st.text_input("Email", autocomplete="username")
-        password = st.text_input("Password", type="password", autocomplete="current-password")
-        submitted = st.form_submit_button("Sign In", use_container_width=True, type="primary")
+        password = st.text_input(
+            "Password", type="password", autocomplete="current-password"
+        )
+        submitted = st.form_submit_button(
+            "Sign In", use_container_width=True, type="primary"
+        )
+
     if submitted:
+        st.session_state.pop("login_error_detail", None)
         if sign_in(email, password):
             st.rerun()
         else:
-            st.error("Invalid email or password.")
+            st.error(
+                "Sign-in failed. Verify your email and password, and check that "
+                "the Supabase user has a profile and a report URL for its role."
+            )
+            detail = st.session_state.get("login_error_detail")
+            if detail:
+                with st.expander("Technical details"):
+                    st.code(detail)
+
     st.caption("Authorized access only")
 
 
 def dashboard_view():
     st.title("📊 Your Dashboard")
-    st.write(f"Signed in as **{st.session_state.email}** ({st.session_state.role})")
-    st.link_button("Open Power BI report", st.session_state.report_url, type="primary")
+    st.write(
+        f"Signed in as **{st.session_state.email}** "
+        f"({st.session_state.role})"
+    )
+    st.link_button(
+        "Open Power BI report",
+        st.session_state.report_url,
+        type="primary",
+    )
     st.button("Log out", on_click=sign_out)
 
 
-if "role" in st.session_state:
+if "role" in st.session_state and "report_url" in st.session_state:
     dashboard_view()
 else:
     login_view()
