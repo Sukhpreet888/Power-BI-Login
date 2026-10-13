@@ -6,16 +6,23 @@ st.set_page_config(page_title="Power BI Portal", page_icon="📊", layout="cente
 # Get these from Supabase Dashboard > Project Settings > API Keys.
 # Use the Project URL and a publishable/anon key only.
 # Do NOT use a service_role or sb_secret key in this app.
-SUPABASE_URL = "https://supabase.com/dashboard/project/hwfunijrvzhpsxfbjfvi"
+# Verify the key below is the publishable/anon key for this same project.
+SUPABASE_URL = "https://hwfunijrvzhpsxfbjfvi.supabase.co"
 SUPABASE_KEY = "sb_publishable_nOEJ-PLfLkh3JnHXDYyuKA_bz6uRIJz"
 
 
 def get_client():
     """Create one Supabase client per Streamlit browser session."""
-    if "YOUR-PROJECT-REF" in SUPABASE_URL or "sb_publishable_nOEJ-PLfLkh3JnHXDYyuKA_bz6uRIJz" in SUPABASE_KEY:
+    if (
+        not SUPABASE_URL.startswith("https://")
+        or "YOUR-PROJECT-REF" in SUPABASE_URL
+        or not SUPABASE_KEY
+        or "YOUR-" in SUPABASE_KEY
+    ):
         st.error(
-            "Please edit app.py and replace SUPABASE_URL and SUPABASE_KEY "
-            "with your actual Supabase Project URL and publishable/anon key."
+            "Supabase configuration is missing. Set SUPABASE_URL to your "
+            "Project URL (https://<project-ref>.supabase.co) and SUPABASE_KEY "
+            "to your publishable/anon key from Supabase Project Settings > API Keys."
         )
         st.stop()
 
